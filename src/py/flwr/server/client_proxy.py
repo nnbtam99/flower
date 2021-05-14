@@ -27,6 +27,8 @@ from flwr.common import (
     Reconnect,
 )
 
+from typing import Tuple
+
 
 class ClientProxy(ABC):
     """Abstract base class for Flower client proxies."""
@@ -45,6 +47,10 @@ class ClientProxy(ABC):
     @abstractmethod
     def evaluate(self, ins: EvaluateIns) -> EvaluateRes:
         """Evaluate the provided weights using the locally held dataset."""
+
+    @abstractmethod
+    def federated_personalized_evaluate(self, ins: EvaluateIns) -> Tuple[EvaluateRes, EvaluateRes]:
+        """FPE the provided weights using the locally held dataset."""
 
     @abstractmethod
     def reconnect(self, reconnect: Reconnect) -> Disconnect:

@@ -16,6 +16,7 @@
 
 
 from abc import ABC, abstractmethod
+from typing import Tuple
 
 from flwr.common import EvaluateIns, EvaluateRes, FitIns, FitRes, ParametersRes
 
@@ -68,4 +69,25 @@ class Client(ABC):
             The evaluation result containing the loss on the local dataset and
             other details such as the number of local data examples used for
             evaluation.
+        """
+    
+    @abstractmethod
+    def federated_personalized_evaluate(self, ins: EvaluateIns) -> Tuple[EvaluateRes, EvaluateRes]:
+        """Evaluate the provided weights using the locally held dataset 
+        and returns (baseline - personalized) pair of metrics
+
+         Parameters
+        ----------
+        ins : EvaluateIns
+            The evaluation instructions containing (global) model parameters
+            received from the server and a dictionary of configuration values
+            used to customize the local evaluation process.
+
+        Returns
+        -------
+        Tuple[EvaluateRes, EvaluateRes]
+            The evaluation result containing the loss on the local dataset and
+            other details such as the number of local data examples used for
+            evaluation.
+
         """

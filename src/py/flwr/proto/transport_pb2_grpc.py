@@ -2,7 +2,7 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
-from flwr.proto import transport_pb2 as flwr_dot_proto_dot_transport__pb2
+import transport_pb2 as transport__pb2
 
 
 class FlowerServiceStub(object):
@@ -16,8 +16,8 @@ class FlowerServiceStub(object):
         """
         self.Join = channel.stream_stream(
                 '/flower.transport.FlowerService/Join',
-                request_serializer=flwr_dot_proto_dot_transport__pb2.ClientMessage.SerializeToString,
-                response_deserializer=flwr_dot_proto_dot_transport__pb2.ServerMessage.FromString,
+                request_serializer=transport__pb2.ClientMessage.SerializeToString,
+                response_deserializer=transport__pb2.ServerMessage.FromString,
                 )
 
 
@@ -35,8 +35,8 @@ def add_FlowerServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'Join': grpc.stream_stream_rpc_method_handler(
                     servicer.Join,
-                    request_deserializer=flwr_dot_proto_dot_transport__pb2.ClientMessage.FromString,
-                    response_serializer=flwr_dot_proto_dot_transport__pb2.ServerMessage.SerializeToString,
+                    request_deserializer=transport__pb2.ClientMessage.FromString,
+                    response_serializer=transport__pb2.ServerMessage.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -60,7 +60,7 @@ class FlowerService(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.stream_stream(request_iterator, target, '/flower.transport.FlowerService/Join',
-            flwr_dot_proto_dot_transport__pb2.ClientMessage.SerializeToString,
-            flwr_dot_proto_dot_transport__pb2.ServerMessage.FromString,
+            transport__pb2.ClientMessage.SerializeToString,
+            transport__pb2.ServerMessage.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

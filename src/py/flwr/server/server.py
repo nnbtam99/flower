@@ -84,6 +84,11 @@ FitResultsAndFailures = Tuple[List[Tuple[ClientProxy, FitRes]], List[BaseExcepti
 EvaluateResultsAndFailures = Tuple[
     List[Tuple[ClientProxy, EvaluateRes]], List[BaseException]
 ]
+
+# FPE 
+FPEResultsAndFailures = Tuple[
+    List[Tuple[ClientProxy, Tuple[EvaluateRes, EvaluateRes]], List[BaseException]]
+]
 ReconnectResultsAndFailures = Tuple[
     List[Tuple[ClientProxy, Disconnect]], List[BaseException]
 ]
@@ -233,6 +238,88 @@ class Server:
             loss_aggregated, metrics_aggregated = aggregated_result
 
         return loss_aggregated, metrics_aggregated, (results, failures)
+
+    def federated_personalized_evaluate_round(
+        self, rnd: int
+    ) -> Optional[Tuple[Optional[float], Dict[str, Scalar], EvaluateResultsAndFailures]
+    ]:
+        """Validate current global model on a number of clients, compute delta metrics and plot histogram"""
+        # Get clients and their respective instructions from strategy
+        client_instructions = self.strategy.configure_evaluate(
+            rnd=rnd, parameters=self.parameters, client_manager=self._client_manager
+        )
+
+        if not client_instructions:
+            log(INFO, "FPE_round: no clients selected, cancel")
+            return None
+        log(
+            DEBUG,
+            "FPE_round: strategy sampled %s clients (out of %s)",
+            len(client_instructions),
+            self._client_manager.num_available(),
+        )
+
+        # Collect `evaluate` results from all clients participating in this round
+        results, failures = federated_personalized_evaluate_clients(client_instructions)
+        log(
+            DEBUG,
+            "FPE_round received %s results and %s failures",
+            len(results),
+            len(failures),
+        )
+
+        # FPE IMPLEMENTATION
+        delta_metrics: List[Tuple[ClientProxy, EvaluateRes]] = []
+
+        # Extract [(client_proxy, personalized_info)] from FPE results for aggregation
+        personalized_results: List[Tuple[ClientProxy, EvaluateRes]] = []
+        for client_proxy, baseline_personalized in results:
+            baseline_res, personalized_res = baseline_personalized
+            personalized_results.append(tuple(client_proxy, personalized_res))
+
+            # COMPUTE DELTA METRICS = after - before = personalized - baseline
+            delta_loss = personalized_res.loss - baseline.loss
+            delta_num_examples = personalized_res.num_examples
+            delta_metrics = {
+                k: personalized_res.metrics.get(k, 0) - baseline_res.metrics.get(k, 0) for k in baseline_res.metrics.keys()
+            }
+            delta_metrics.append(tuple(client_proxy, EvaluateRes(
+                loss=delta_loss,
+                num_examples=delta_num_examples,
+                accuracy=0.0, # Deprecated
+                metrics=delta_metrics
+            )))
+        log(
+            DEBUG,
+            "FPE_round: delta loss: %s\n num_examples: %s",
+            delta_loss,
+            delta_num_examples,
+            # delta_metrics # later
+        )
+
+        # PLOT HISTOGRAM - IMPLEMENT LATER
+
+        # Still return the federated metrics as usual
+        # Aggregate the personalized evaluation results
+        aggregated_result: Union[
+            Tuple[Optional[float], Dict[str, Scalar]],
+            Optional[float],  # Deprecated
+        ] = self.strategy.aggregate_evaluate(rnd, personalized_results, failures)
+
+        metrics_aggregated: Dict[str, Scalar] = {}
+        if aggregated_result is None:
+            # Backward-compatibility, this will be removed in a future update
+            log(WARNING, DEPRECATION_WARNING_EVALUATE_ROUND)
+            loss_aggregated = None
+        elif isinstance(aggregated_result, float):
+            # Backward-compatibility, this will be removed in a future update
+            log(WARNING, DEPRECATION_WARNING_EVALUATE_ROUND)
+            loss_aggregated = aggregated_result
+        else:
+            loss_aggregated, metrics_aggregated = aggregated_result
+
+        return loss_aggregated, metrics_aggregated, (results, failures)
+
 
     def fit_round(
         self, rnd: int
@@ -393,3 +480,35 @@ def evaluate_client(
     """Evaluate parameters on a single client."""
     evaluate_res = client.evaluate(ins)
     return client, evaluate_res
+
+# FPE IMPLEMENTATION
+def federated_personalized_evaluate_clients(
+    client_instructions: List[Tuple[ClientProxy, EvaluateIns]]
+) -> FPEResultsAndFailures:
+    """FPE parameters concurrently on all selected clients."""
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = [
+            executor.submit(federated_personalized_evaluate_client, c, ins) for c, ins in client_instructions
+        ]
+        concurrent.futures.wait(futures)
+    
+    # Gather results
+    results: List[Tuple[ClientProxy, Tuple[EvaluateRes, EvaluateRes]]] = []
+    failures: List[BaseException] = []
+    for future in futures:
+        failure = future.exception()
+        if failure is not None:
+            failures.append(failure)
+        else:
+            # Success case
+            result = future.result()
+            results.append(result)
+    return results, failures
+
+
+def federated_personalized_evaluate_client(
+    client: ClientProxy, ins: EvaluateIns
+) -> Tuple[ClientProxy, Tuple[EvaluateRes, EvaluateRes]]:
+    """FPE parameters on a single client."""
+    baseline_res, personalized_res = client.federated_personalized_evaluate(ins)
+    return client, (baseline_res, personalized_res)

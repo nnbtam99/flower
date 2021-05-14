@@ -40,6 +40,8 @@ def handle(
         return _fit(client, server_msg.fit_ins), 0, True
     if server_msg.HasField("evaluate_ins"):
         return _evaluate(client, server_msg.evaluate_ins), 0, True
+    if server_msg.HasField("fpe_ins"):
+        return _federated_personalized_evaluate(client, server_msg.fpe_ins), 0, True
     raise UnkownServerMessage()
 
 
@@ -69,6 +71,16 @@ def _evaluate(client: Client, evaluate_msg: ServerMessage.EvaluateIns) -> Client
     evaluate_res_proto = serde.evaluate_res_to_proto(evaluate_res)
     return ClientMessage(evaluate_res=evaluate_res_proto)
 
+def _federated_personalized_evaluate(client: Client,
+    fpe_msg: ServerMessage.FederatedPersonalizedEvaluateIns
+) -> ClientMessage:
+    # Deserialize fpe instruction
+    fpe_ins = serde.fpe_ins_from_proto(fpe_msg)
+    # Perform federated personalized evaluation
+    fpe_res = client.federated_personalized_evaluate(fpe_ins)
+    # Serialize fpe result
+    fpe_res_proto = serde.fpe_res_to_proto(fpe_res)
+    return ClientMessage(fpe_res=fpe_res_proto)
 
 def _reconnect(
     reconnect_msg: ServerMessage.Reconnect,

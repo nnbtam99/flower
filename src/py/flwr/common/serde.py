@@ -15,7 +15,7 @@
 """ProtoBuf serialization and deserialization."""
 
 
-from typing import Any, List, cast
+from typing import Any, List, cast, Tuple
 
 from flwr.proto.transport_pb2 import (
     ClientMessage,
@@ -219,6 +219,75 @@ def evaluate_res_from_proto(msg: ClientMessage.EvaluateRes) -> typing.EvaluateRe
         metrics=metrics,
     )
 
+# === FPE messages ===
+def fpe_ins_to_proto(ins: typing.EvaluateIns) -> ServerMessage.FederatedPersonalizedEvaluateIns:
+    """Serialize flower.EvaluateIns to ProtoBuf message."""
+    parameters_proto = parameters_to_proto(ins.parameters)
+    config_msg = metrics_to_proto(ins.config)
+    return ServerMessage.FederatedPersonalizedEvaluateIns(parameters=parameters_proto, config=config_msg)
+
+def fpe_ins_from_proto(msg: ServerMessage.FederatedPersonalizedEvaluateIns) -> typing.EvaluateIns:
+    """Deserialize flower.EvaluateIns from ProtoBuf message."""
+    parameters = parameters_from_proto(msg.parameters)
+    config = metrics_from_proto(msg.config)
+    return typing.EvaluateIns(parameters=parameters, config=config)    
+
+def fpe_res_to_proto(res: Tuple[typing.EvaluateRes, typing.EvaluateRes]) -> ClientMessage.FederatedPersonalizedEvaluateRes:
+    """Serialize flower.EvaluateRes to ProtoBuf message."""
+    baseline, personalize = res[0], res[1]
+    baseline_metrics_msg = None if baseline.metrics is None else metrics_to_proto(baseline.metrics)
+    personalized_metrics_msg = None if personalized.metrics is None else metrics_to_proto(personalized.metrics)
+
+    # Legacy case, will be removed in a future release
+    if baseline.accuracy is not None:
+        baseline_fpe_res_proto = ClientMessage.FederatedPersonalizedEvaluateRes(
+            loss=baseline.loss,
+            num_examples=baseline.num_examples,
+            accuracy=baseline.accuracy,  # Deprecated
+            metrics=baseline_metrics_msg,
+        )
+        personalized_fpe_res_proto = ClientMessage.FederatedPersonalizedEvaluateRes(
+            loss=personalized.loss,
+            num_examples=personalized.num_examples,
+            accuracy=personalized.accuracy,  # Deprecated
+            metrics=personalized_metrics_msg,
+        )
+        return baseline_fpe_res_proto, personalized_fpe_res_proto
+
+    # Forward-compatible case
+
+    baseline_fpe_res_proto = ClientMessage.FederatedPersonalizedEvaluateRes(
+            loss=baseline.loss,
+            num_examples=baseline.num_examples,
+            metrics=baseline_metrics_msg,
+        )
+    personalized_fpe_res_proto = ClientMessage.FederatedPersonalizedEvaluateRes(
+            loss=personalized.loss,
+            num_examples=personalized.num_examples,
+            metrics=personalized_metrics_msg,
+        )
+    return baseline_fpe_res_proto, personalized_fpe_res_proto
+
+def fpe_res_from_proto(msg: ClientMessage.FederatedPersonalizedEvaluateRes) -> Tuple[typing.EvaluateRes, typing.EvaluateRes]:
+    """Deserialize flower.EvaluateRes from ProtoBuf message."""
+    baseline, personalized = msg.baseline, msg.personalized
+    baseline_metrics = None if baseline.metrics is None else metrics_from_proto(baseline.metrics)
+    personalized_metrics = None if personalized.metrics is None else metrics_from_proto(personalized.metrics)
+    
+    baseline_fpe_res = typing.EvaluateRes(
+        loss=baseline.loss,
+        num_examples=baseline.num_examples,
+        accuracy=baseline.accuracy, # Deprecated
+        metrics=baseline.metrics,
+    )
+    personalized_fpe_res = typing.EvaluateRes(
+        loss=personalized.loss,
+        num_examples=personalized.num_examples,
+        accuracy=personalized.accuracy, # Deprecated
+        metrics=personalized.metrics,
+    )
+
+    return baseline_fpe_res, personalized_fpe_res
 
 # === Metrics messages ===
 

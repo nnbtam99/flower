@@ -20,7 +20,7 @@ from flwr.common import serde
 from flwr.proto.transport_pb2 import ClientMessage, ServerMessage
 from flwr.server.client_proxy import ClientProxy
 from flwr.server.grpc_server.grpc_bridge import GRPCBridge
-
+from typing import Tuple
 
 class GrpcClientProxy(ClientProxy):
     """Flower client proxy which delegates over the network using gRPC."""
@@ -59,6 +59,17 @@ class GrpcClientProxy(ClientProxy):
         )
         evaluate_res = serde.evaluate_res_from_proto(client_msg.evaluate_res)
         return evaluate_res
+
+    
+    def federated_personalized_evaluate(self, ins: common.EvaluateIns
+    ) -> Tuple[common.EvaluateRes, common.EvaluateRes]:
+        """Federated personalized evaluate the provided weights using the locally held dataset."""
+        fpe_msg = serde.fpe_ins_to_proto(ins)
+        client_msg: ClientMessage = self.bridge.request(
+            ServerMessage(fpe_ins=fpe_msg)
+        )
+        baseline_fpe_res, personalized_fpe_res = serde.fpe_res_from_proto(client_msg.fpe_res)
+        return baseline_fpe_res, personalized_fpe_res
 
     def reconnect(self, reconnect: common.Reconnect) -> common.Disconnect:
         """Disconnect and (optionally) reconnect later."""
